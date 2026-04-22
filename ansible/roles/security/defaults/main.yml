@@ -1,0 +1,13 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+---
+ufw_allowed_ports:
+  - { port: "22",    proto: tcp,  comment: SSH }
+  - { port: "6443",  proto: tcp,  comment: "k3s API server" }
+  - { port: "10250", proto: tcp,  comment: "kubelet API" }
+  - { port: "8472",  proto: udp,  comment: "flannel VXLAN" }
+  - { port: "51820", proto: udp,  comment: "WireGuard (flannel backend)" }
+
+fail2ban_ssh_maxretry: 5
+fail2ban_ssh_bantime: 3600

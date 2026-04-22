@@ -1,0 +1,90 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+---
+- name: Install security packages
+  apt:
+    name:
+      - ufw
+      - fail2ban
+    state: present
+
+- name: Set UFW default incoming policy to deny
+  ufw:
+    direction: incoming
+    policy: deny
+
+- name: Set UFW default outgoing policy to allow
+  ufw:
+    direction: outgoing
+    policy: allow
+
+# CNI (flannel) and kube-proxy require packet forwarding between nodes.
+# Without this, pod-to-service traffic is dropped in the FORWARD chain.
+- name: Set UFW default routed policy to allow (required for CNI)
+  ufw:
+    direction: routed
+    policy: allow
+
+- name: Allow required ports
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ ufw_allowed_ports }}"
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+    logging: "on"
+
+- name: Write fail2ban jail config
+  copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [sshd]
+      enabled  = true
+      port     = ssh
+      maxretry = {{ fail2ban_ssh_maxretry }}
+      bantime  = {{ fail2ban_ssh_bantime }}
+    mode: "0644"
+  notify: restart fail2ban
+
+- name: Enable and start fail2ban
+  service:
+    name: fail2ban
+    state: started
+    enabled: true
+
+- name: Disable SSH password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+    validate: sshd -t -f %s
+  notify: restart sshd
+
+- name: Disable SSH root login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitRootLogin"
+    line: "PermitRootLogin no"
+    validate: sshd -t -f %s
+  notify: restart sshd
+
+- name: Set SSH idle timeout
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?ClientAliveInterval"
+    line: "ClientAliveInterval 300"
+    validate: sshd -t -f %s
+  notify: restart sshd
+
+- name: Set SSH max alive count
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?ClientAliveCountMax"
+    line: "ClientAliveCountMax 2"
+    validate: sshd -t -f %s
+  notify: restart sshd

@@ -1,0 +1,70 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# Bootstrap playbook — runs all three roles in the correct order.
+# Plays are separated so control-plane k3s is fully ready before workers attempt to join.
+---
+
+# Play 1: System baseline — all nodes in parallel
+- name: Base system configuration
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: base
+  tags: [base]
+
+# Play 2: Security hardening — all nodes in parallel
+- name: Security hardening
+  hosts: all
+  become: true
+  gather_facts: false
+  roles:
+    - role: security
+  tags: [security]
+
+# Play 3: k3s server — control-plane only (must complete before workers join)
+- name: Kubernetes control-plane (k3s server)
+  hosts: control_plane
+  become: true
+  gather_facts: false
+  roles:
+    - role: kubernetes
+  tags: [kubernetes, control-plane]
+
+# Play 4: k3s agents — workers join after control-plane is ready
+# hostvars from Play 3 (k3s_token) are available here within the same playbook run.
+- name: Kubernetes workers (k3s agents)
+  hosts: workers
+  become: true
+  gather_facts: false
+  roles:
+    - role: kubernetes
+  tags: [kubernetes, workers]
+
+# Play 5: Open k3s NodePort range (30000-32767) in UFW on all cluster nodes.
+# Required before Argo CD UI / other NodePort services are reachable from the host.
+- name: Open NodePort firewall range on cluster nodes
+  hosts: k3s_cluster
+  become: true
+  gather_facts: false
+  tags: [argocd, gitops, nodeports]
+  tasks:
+    - name: Allow k3s NodePort range in UFW
+      ufw:
+        rule: allow
+        port: "30000:32767"
+        proto: tcp
+        comment: "k3s NodePort services"
+
+# Play 6: Argo CD bootstrap — runs on localhost using the kubeconfig fetched in Play 3.
+# Installs Argo CD via Helm and applies the root App-of-Apps manifest.
+# Requires: helm, kubectl on the control machine; kubeconfig at ansible/kubeconfig/dev.yaml.
+- name: Bootstrap Argo CD (GitOps layer)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: argocd
+  tags: [argocd, gitops]

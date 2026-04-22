@@ -1,0 +1,31 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# Argo CD self-management — after bootstrap, Argo CD manages its own Helm release.
+# Sync is manual (not automated) to avoid a race between Helm bootstrap and GitOps takeover.
+# To hand over: argocd app sync argocd --kubeconfig ansible/kubeconfig/dev.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/imuradu/enclaive-platform-challenge.git
+    targetRevision: main
+    path: gitops/infrastructure/argocd
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    # Manual sync — do not set automated here to avoid Argo CD restarting itself
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

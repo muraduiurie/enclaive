@@ -1,0 +1,29 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# Root App-of-Apps — applied once by Ansible to bootstrap the GitOps loop.
+# Argo CD reads every .yaml in gitops/clusters/dev/ and creates child Applications.
+# After this is applied, all further changes go through git.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/imuradu/enclaive-platform-challenge.git
+    targetRevision: main
+    path: gitops/clusters/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

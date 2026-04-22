@@ -1,0 +1,93 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# Bootstraps Argo CD on the cluster via Helm, then applies the root App-of-Apps.
+# Runs on localhost (the control machine); uses kubeconfig from ansible/kubeconfig/dev.yaml.
+# LLM note: delegate_to/connection:local pattern keeps helm/kubectl off the VMs.
+---
+- name: Verify helm is installed
+  command: helm version --short
+  changed_when: false
+
+- name: Verify kubectl is installed
+  command: kubectl version --client
+  changed_when: false
+
+- name: Add Argo Helm repository
+  command: helm repo add argo https://argoproj.github.io/argo-helm
+  register: _repo_add
+  changed_when: "'already exists' not in _repo_add.stderr"
+  failed_when: _repo_add.rc != 0 and 'already exists' not in _repo_add.stderr
+
+- name: Update Helm repositories
+  command: helm repo update
+  changed_when: false
+
+- name: Create Argo CD namespace
+  command: >
+    kubectl --kubeconfig {{ argocd_kubeconfig }}
+    create namespace {{ argocd_namespace }} --dry-run=client -o yaml
+  register: _ns_yaml
+  changed_when: false
+
+- name: Apply Argo CD namespace
+  command: kubectl --kubeconfig {{ argocd_kubeconfig }} apply -f -
+  args:
+    stdin: "{{ _ns_yaml.stdout }}"
+  register: _ns_apply
+  changed_when: "'configured' in _ns_apply.stdout or 'created' in _ns_apply.stdout"
+
+- name: Template Argo CD Helm values
+  template:
+    src: argocd-values.yaml.j2
+    dest: /tmp/argocd-values.yaml
+    mode: "0600"
+
+- name: Install / upgrade Argo CD via Helm
+  command: >
+    helm upgrade --install {{ argocd_helm_release }} argo/argo-cd
+    --namespace {{ argocd_namespace }}
+    --version {{ argocd_chart_version }}
+    --values /tmp/argocd-values.yaml
+    --wait
+    --timeout 300s
+    --kubeconfig {{ argocd_kubeconfig }}
+  register: _helm_result
+  changed_when: >-
+    ('Release "' + argocd_helm_release + '" has been upgraded') in _helm_result.stdout or
+    ('Release "' + argocd_helm_release + '" has been installed') in _helm_result.stdout
+
+- name: Wait for argocd-server to be ready
+  command: >
+    kubectl --kubeconfig {{ argocd_kubeconfig }}
+    rollout status deployment/argocd-server
+    -n {{ argocd_namespace }}
+    --timeout=120s
+  changed_when: false
+
+- name: Apply root App-of-Apps manifest
+  command: >
+    kubectl --kubeconfig {{ argocd_kubeconfig }}
+    apply -f {{ playbook_dir }}/../../gitops/clusters/dev/root-app.yaml
+  register: _root_app
+  changed_when: "'configured' in _root_app.stdout or 'created' in _root_app.stdout"
+
+- name: Retrieve initial admin password
+  command: >
+    kubectl --kubeconfig {{ argocd_kubeconfig }}
+    -n {{ argocd_namespace }}
+    get secret argocd-initial-admin-secret
+    -o jsonpath='{.data.password}'
+  register: _admin_pw_b64
+  changed_when: false
+  failed_when: false
+
+- name: Print Argo CD access info
+  debug:
+    msg:
+      - "Argo CD is ready."
+      - "UI: https://{{ groups['control_plane'][0] | default('192.168.56.10') }}:{{ argocd_server_nodeport_https }}"
+      - "Username: admin"
+      - "Password: {{ _admin_pw_b64.stdout | b64decode if _admin_pw_b64.stdout else '(already rotated — check argocd-initial-admin-secret)' }}"
+      - "Root app: kubectl --kubeconfig ansible/kubeconfig/dev.yaml get applications -n argocd"

@@ -1,0 +1,23 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+---
+- name: Install containerd
+  import_tasks: containerd.yml
+
+- name: Discover cluster IP from secondary interface
+  shell: ip addr show {{ k3s_cluster_iface }} | awk '/inet /{print $2}' | cut -d/ -f1
+  register: _cluster_ip
+  changed_when: false
+
+- name: Set cluster IP fact
+  set_fact:
+    k3s_node_ip: "{{ _cluster_ip.stdout | trim }}"
+
+- name: Install k3s server on control-plane
+  import_tasks: k3s_server.yml
+  when: inventory_hostname in groups['control_plane']
+
+- name: Install k3s agent on workers
+  import_tasks: k3s_agent.yml
+  when: inventory_hostname in groups['workers']

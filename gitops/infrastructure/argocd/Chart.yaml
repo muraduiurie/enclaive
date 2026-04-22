@@ -1,0 +1,12 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+apiVersion: v2
+name: argocd
+description: Argo CD — GitOps continuous delivery (self-managed after bootstrap)
+type: application
+version: 0.1.0
+dependencies:
+  - name: argo-cd
+    version: "7.8.26"
+    repository: https://argoproj.github.io/argo-helm

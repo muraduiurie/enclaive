@@ -1,0 +1,24 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# NodePort mode — no LoadBalancer available on Apple Silicon QEMU.
+# HTTP: host:30000, HTTPS: host:30001
+ingress-nginx:
+  controller:
+    service:
+      type: NodePort
+      nodePorts:
+        http: 30000
+        https: 30001
+    hostNetwork: false
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+    # Admission webhook can cause issues on k3s — disable for dev
+    admissionWebhooks:
+      enabled: false

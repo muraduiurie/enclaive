@@ -1,0 +1,24 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+---
+k3s_version: "v1.32.4+k3s1"
+k3s_install_url: "https://get.k3s.io"
+
+# Control-plane listens on this address; workers reach it via QEMU NAT gateway.
+# On Apple Silicon with QEMU, 10.0.2.2 is the host gateway accessible from all VMs.
+# A port-forward (hostfwd) on cp-0 maps host:6443 → cp-0:6443.
+k3s_api_via_host: "10.0.2.2"
+k3s_api_port: 6443
+
+# TLS SANs added to the API server certificate so workers can validate it
+# when connecting via the QEMU NAT gateway address
+k3s_tls_sans:
+  - "10.0.2.2"
+  - "127.0.0.1"
+
+# Cluster network interface (QEMU multicast socket — IPs unique per node)
+k3s_cluster_iface: "enp0s2"
+
+# Local path where kubeconfig is saved after bootstrap
+k3s_kubeconfig_local: "{{ playbook_dir }}/../../kubeconfig/dev.yaml"

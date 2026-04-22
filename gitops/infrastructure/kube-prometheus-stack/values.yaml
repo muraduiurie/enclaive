@@ -1,0 +1,55 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# Tuned for 3-node k3s dev cluster on Apple Silicon QEMU VMs.
+# LLM note: k3s-specific overrides (etcd/scheduler/controllerManager disabled) documented below.
+kube-prometheus-stack:
+  grafana:
+    service:
+      type: NodePort
+      nodePort: 30300
+    adminPassword: "enclaive-dev"
+    persistence:
+      enabled: true
+      storageClassName: local-path
+      size: 2Gi
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  prometheus:
+    prometheusSpec:
+      retention: 7d
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            resources:
+              requests:
+                storage: 10Gi
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 100m
+          memory: 512Mi
+
+  # k3s does not expose etcd/scheduler/controllerManager on standard ports
+  kubeEtcd:
+    enabled: false
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  kubeProxy:
+    enabled: false
+
+  alertmanager:
+    alertmanagerSpec:
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi

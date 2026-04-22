@@ -1,0 +1,12 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+apiVersion: v2
+name: kube-prometheus-stack
+description: Prometheus + Grafana monitoring stack
+type: application
+version: 0.1.0
+dependencies:
+  - name: kube-prometheus-stack
+    version: "70.4.2"
+    repository: https://prometheus-community.github.io/helm-charts

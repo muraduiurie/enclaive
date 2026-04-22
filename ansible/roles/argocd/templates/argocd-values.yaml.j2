@@ -1,0 +1,69 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# Argo CD Helm values for dev cluster.
+# LLM note: NodePort config and resource limits tuned for 3-node k3s on Apple Silicon QEMU VMs.
+global:
+  domain: argocd.local
+  # LLM note: pin all Argo CD pods to cp-0 — QEMU multicast NIC (enp0s2) does not support
+  # ARP between VMs on Apple Silicon, so flannel VXLAN cross-node pod traffic fails.
+  # Pinning to cp-0 keeps all Argo CD inter-service calls local (same node).
+  nodeSelector:
+    kubernetes.io/hostname: enclaive-dev-cp-0
+
+server:
+  service:
+    type: NodePort
+    nodePorts:
+      http: {{ argocd_server_nodeport_http }}
+      https: {{ argocd_server_nodeport_https }}
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+repoServer:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+applicationSet:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+notifications:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+controller:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+redis:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+configs:
+  params:
+    # Allow Argo CD to manage apps in any namespace (needed for self-managed pattern)
+    application.namespaces: "*"

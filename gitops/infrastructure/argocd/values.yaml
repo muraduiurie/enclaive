@@ -1,0 +1,64 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# Argo CD values for self-managed GitOps mode (after Helm bootstrap).
+# Must stay in sync with ansible/roles/argocd/templates/argocd-values.yaml.j2.
+argo-cd:
+  global:
+    domain: argocd.local
+
+  server:
+    service:
+      type: NodePort
+      nodePorts:
+        http: 30080
+        https: 30443
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  repoServer:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+  applicationSet:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+  notifications:
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  controller:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+  redis:
+    resources:
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+  configs:
+    params:
+      application.namespaces: "*"
