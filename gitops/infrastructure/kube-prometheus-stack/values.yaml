@@ -46,6 +46,10 @@ kube-prometheus-stack:
   prometheusOperator:
     nodeSelector:
       kubernetes.io/hostname: enclaive-dev-cp-0
+    # Disable the cert-generation Job hook — it runs once on install then deletes itself,
+    # causing Argo CD to get stuck "waiting for completion" on every subsequent sync.
+    admissionWebhooks:
+      enabled: false
 
   kube-state-metrics:
     nodeSelector:
