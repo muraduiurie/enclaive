@@ -22,6 +22,9 @@ ansible/inventory/*.yml
 id_rsa
 id_ed25519
 
+# Personal speaker notes — not for commit
+SPEAKER_NOTES.md
+
 # IDE
 .idea/
 *.iml
