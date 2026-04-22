@@ -105,7 +105,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: mc
-          image: quay.io/minio/mc:RELEASE.2024-01-16T16-07-38Z
+          image: docker.io/minio/mc:latest
           command:
             - /bin/sh
             - -c
