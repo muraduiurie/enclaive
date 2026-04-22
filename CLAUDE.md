@@ -140,7 +140,7 @@ enclaive-platform-challenge/
 
 - Prioritize correctness and architecture clarity over feature completeness
 - Document LLM usage inline with `# LLM note:` comments in source files; also noted in README
-- README must include a timetable (time per sub-task) — not yet written
+- README includes a timetable (time per sub-task) — written
 - NOTICE header must appear at the top of every new source file created
 
 ## Deployment order (authoritative)
@@ -184,15 +184,20 @@ Follow this exact order when building or testing the platform end-to-end:
 | `gitops/infrastructure/ingress-nginx/` | Done |
 | `gitops/infrastructure/kube-prometheus-stack/` | Done |
 | `gitops/operators/postgres/` (CloudNativePG operator chart) | Done |
-| `gitops/applications/demo-app/` (namespace placeholder) | **TODO (full app)** |
-| GitHub repo push (required for Argo CD to sync) | **TODO** |
-| CloudNativePG PostgreSQL Cluster CR | **TODO** |
-| Demo app (Go/Python REST API) | **TODO** |
-| `docs/architecture.md` | **TODO** |
-| `docs/operations.md` | **TODO** |
-| `docs/security.md` | **TODO** |
-| `docs/leadership.md` | **TODO** |
-| README timetable | **TODO** |
+| `gitops/applications/postgres/` (CNPG Cluster CR, MinIO, backups, secrets) | Done |
+| `gitops/applications/demo-app/` (Deployment, Service, db-secret, namespace) | Done |
+| `gitops/clusters/dev/` (all child Apps: cloudnative-pg, postgres-cluster, demo-app, monitoring) | Done |
+| `gitops/clusters/prod/root-app.yaml` (prod App-of-Apps skeleton) | Done |
+| `demo-app/` (Go REST API, Dockerfile, go.mod) | Done |
+| `.github/workflows/demo-app.yml` (GitHub Actions CI → ghcr.io) | Done |
+| GitHub repo push (required for Argo CD to sync) | Done |
+| CloudNativePG PostgreSQL Cluster CR (3 instances, barman backups to MinIO) | Done |
+| Demo app (Go REST API, /healthz + /items CRUD, verified working) | Done |
+| `docs/architecture.md` | Done |
+| `docs/operations.md` | Done |
+| `docs/security.md` | Done |
+| `docs/leadership.md` | Done |
+| README timetable | Done |
 
 ## Apple Silicon Networking — Solved Constraints
 

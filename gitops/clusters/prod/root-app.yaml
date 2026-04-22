@@ -1,0 +1,43 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# Root App-of-Apps for the production cluster.
+# Applied once by Ansible (bootstrap.yml --tags argocd) against the prod kubeconfig.
+# After this is applied, all further changes go through git.
+#
+# LLM note: prod cluster differences from dev:
+#   - targetRevision: prod (a protected branch or semver tag — not main)
+#   - More replicas, larger resource limits in per-environment values files
+#   - Separate Argo CD project with stricter sync policies (manual sync, no prune)
+#   - Separate RBAC — prod cluster operators cannot write to the prod Argo CD project
+# None of these prod-hardening steps are implemented for the assessment (no prod
+# hardware is available), but the structure is here to show the pattern.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/muraduiurie/enclaive.git
+    # LLM note: prod targets a protected branch/tag, not main, so only reviewed
+    # and approved changes reach production. In practice this would be 'prod' or
+    # a semver tag like 'v1.2.0' managed via the release process.
+    targetRevision: prod
+    path: gitops/clusters/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    # LLM note: prod uses manual sync (not automated) so a human approves each
+    # deployment. selfHeal is still enabled to correct drift, but new rollouts
+    # require an explicit argocd app sync or UI approval.
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
