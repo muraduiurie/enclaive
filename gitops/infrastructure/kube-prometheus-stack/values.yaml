@@ -4,8 +4,12 @@
 #
 # Tuned for 3-node k3s dev cluster on Apple Silicon QEMU VMs.
 # LLM note: k3s-specific overrides (etcd/scheduler/controllerManager disabled) documented below.
+# LLM note: All components pinned to cp-0 via nodeSelector — QEMU multicast socket NIC (enp0s2)
+# does not support ARP between VMs on Apple Silicon, so cross-node pod-to-pod traffic is broken.
 kube-prometheus-stack:
   grafana:
+    nodeSelector:
+      kubernetes.io/hostname: enclaive-dev-cp-0
     service:
       type: NodePort
       nodePort: 30300
@@ -21,6 +25,8 @@ kube-prometheus-stack:
 
   prometheus:
     prometheusSpec:
+      nodeSelector:
+        kubernetes.io/hostname: enclaive-dev-cp-0
       retention: 7d
       storageSpec:
         volumeClaimTemplate:
@@ -37,6 +43,28 @@ kube-prometheus-stack:
           cpu: 100m
           memory: 512Mi
 
+  prometheusOperator:
+    nodeSelector:
+      kubernetes.io/hostname: enclaive-dev-cp-0
+
+  kube-state-metrics:
+    nodeSelector:
+      kubernetes.io/hostname: enclaive-dev-cp-0
+
+  alertmanager:
+    alertmanagerSpec:
+      nodeSelector:
+        kubernetes.io/hostname: enclaive-dev-cp-0
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+
+  # node-exporter runs as DaemonSet — allow on all nodes (it's a lightweight scraper)
+  prometheus-node-exporter:
+    hostNetwork: true
+    hostPID: true
+
   # k3s does not expose etcd/scheduler/controllerManager on standard ports
   kubeEtcd:
     enabled: false
@@ -46,10 +74,3 @@ kube-prometheus-stack:
     enabled: false
   kubeProxy:
     enabled: false
-
-  alertmanager:
-    alertmanagerSpec:
-      resources:
-        limits:
-          cpu: 100m
-          memory: 128Mi

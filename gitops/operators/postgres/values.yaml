@@ -1,7 +1,12 @@
 # NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
 # Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
 # is strictly prohibited and gives legal ground if abused.
+# LLM note: nodeSelector pins the operator pod to cp-0 because QEMU multicast socket NIC
+# (enp0s2) does not support ARP between VMs on Apple Silicon — cross-node pod-to-pod
+# communication is broken. All workloads must run on cp-0.
 cloudnative-pg:
+  nodeSelector:
+    kubernetes.io/hostname: enclaive-dev-cp-0
   resources:
     limits:
       cpu: 200m
