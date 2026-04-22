@@ -10,7 +10,10 @@ Answers to the four leadership questions from the assessment.
 
 ### Roles
 
-Rather than assigning fixed titles, I'd organize by domain ownership with rotation:
+I organize by domain ownership — not rotation. Each engineer owns an area of the system
+long-term and is expected to go deep. Ownership means being the primary point of contact
+for incidents, driving improvements, and being accountable for the quality of work in that
+domain.
 
 | Domain | Primary Owner | Backup |
 |---|---|---|
@@ -18,32 +21,37 @@ Rather than assigning fixed titles, I'd organize by domain ownership with rotati
 | Databases / Operators | Engineer B | Engineer C |
 | CI/CD / Developer Experience | Engineer C | Engineer A |
 
-Ownership means being on-call for incidents, driving improvements, and being the first reviewer for PRs in that domain. Rotation every 6 months prevents knowledge silos — the person who didn't build the thing eventually maintains it.
+Knowledge silos are prevented not by rotation but by a strict expectation that the domain
+owner documents extensively and shares context proactively. If only one person understands
+a system, that is a documentation failure, not an org-chart problem.
 
 ### Review Process
 
-**All infrastructure changes go through git.** No one applies kubectl or terraform manually in production. This is enforced by:
-- Branch protection: require 1 review + passing CI before merge to `main`
-- Argo CD: `selfHeal: true` — drift is corrected automatically, reinforcing that git is truth
-- Terraform: `plan` output posted to the PR as a comment; engineer reviews the diff before approving
+**All infrastructure changes go through git.** No one applies kubectl or Terraform manually
+in production.
 
-Review split:
-- Terraform changes: peer review + test in dev environment before merging
-- Helm values / Argo CD changes: peer review; Argo CD syncs to dev automatically, reviewer checks dev app health before approving prod promotion
-- Application manifests: author's domain owner approves; second engineer spot-checks security context, resource limits
+- Branch protection: require 1 approval + passing CI before merge to `main`
+- Any engineer can approve any PR — no domain gatekeeping; flat review model
+- Terraform: CI pipeline runs `terraform plan` automatically and posts the output to the PR
+  as a comment; the reviewer reads the diff, they do not run it manually
+- Argo CD `selfHeal: true` corrects drift automatically, reinforcing git as the single source
+  of truth
 
 ### Release Management
 
-**Environments**: `dev` (auto-sync from `main`) → `prod` (manual promotion via PR to a `prod` branch or tag).
+**Environments**: `dev` (automated sync from `main`) → `prod` (human decision, always).
 
 Promotion flow:
 1. Change merged to `main` → Argo CD applies to `dev` automatically
 2. Engineer validates in `dev` (smoke test, metric check)
 3. PR opened from `main` → `prod` with changelog
-4. Second engineer reviews, approves, merges
+4. A second engineer must review and approve — no exceptions, including hotfixes
 5. Argo CD applies to `prod`
 
-Argo CD's sync wave annotations (`argocd.argoproj.io/sync-wave`) control ordering when multiple changes must sequence (e.g., CRD before CR, operator before cluster CR).
+Prod always requires a second pair of eyes. This is a hard rule, not a guideline.
+
+Argo CD sync wave annotations (`argocd.argoproj.io/sync-wave`) control ordering when
+multiple changes must sequence (e.g., CRD before CR, operator before cluster CR).
 
 ---
 
@@ -58,23 +66,41 @@ gitops/clusters/dev/   ← Argo CD reads this for the dev cluster
 gitops/clusters/prod/  ← Argo CD reads this for the prod cluster
 ```
 
-Each environment has its own set of Argo CD Applications pointing at the same infrastructure/operator charts but with environment-specific `valueFiles`. Shared defaults live in a base `values.yaml`; overrides in `values-dev.yaml` / `values-prod.yaml`.
+Each environment points at the same infrastructure/operator charts with environment-specific
+`valueFiles`. Shared defaults live in `values.yaml`; overrides in `values-dev.yaml` /
+`values-prod.yaml`.
 
-### Customer Configuration Variations
+### Customer Onboarding
 
-For a multi-tenant platform where each customer has different infrastructure:
+Customer onboarding is self-service. A new customer submits their configuration via a
+defined interface (PR, form-to-PR pipeline, or CLI tool). CI validates the config with
+hardened gates before anything merges — schema validation, policy checks, dry-run apply.
+The infra team is not in the critical path for routine onboarding.
 
-1. **Helm values per customer**: A `values-customer-acme.yaml` layer on top of the base, managed in a separate `customers/` directory or a separate repo (GitOps multi-repo pattern)
-2. **ApplicationSet**: Argo CD `ApplicationSet` with a `git` generator can automatically create one Application per directory in `customers/` — adding a new customer is a single git commit
-3. **Kustomize overlays**: Base manifests in `gitops/base/`, overlay per environment/customer in `gitops/overlays/acme-prod/`
+Argo CD `ApplicationSet` with a `git` generator automatically creates one Application
+per customer directory. Adding a customer is a single validated git commit.
 
 ### Upgrade Strategy
 
-**Operators** (CloudNativePG, etc.): Pin chart version in `Chart.yaml`. Upgrade by bumping the version, testing in dev, then promoting to prod. The operator's own rolling-restart mechanism handles PostgreSQL minor upgrades with zero scheduled downtime.
+**Upgrade decisions are owned by the Product Owner**, not the infra team. The infra team
+executes, it does not self-initiate upgrades. The flow:
 
-**Kubernetes** (k3s): k3s supports in-place upgrades via the [System Upgrade Controller](https://github.com/rancher/system-upgrade-controller). A `Plan` CR targets nodes by label, upgrading one at a time. Worker nodes drain before upgrade; control-plane upgrades last.
+1. PO opens a ticket with the target version and rationale
+2. Engineer picks up the ticket, bumps the chart/image version in a branch
+3. CI validates, deploys to `dev`, engineer smoke-tests
+4. PO approves promotion; second engineer reviews the prod PR
+5. Merge → Argo CD applies to prod
 
-**PostgreSQL major versions**: New cluster bootstrap from a logical backup, dual-run period with replication, then DNS/service cutover. Declared in git as a new Cluster CR with `bootstrap.recovery`, not an in-place upgrade.
+**PostgreSQL minor upgrades**: CloudNativePG handles these via rolling restart. The GitOps
+change is a version bump in the Cluster CR; the operator sequences the restart with no
+scheduled downtime.
+
+**PostgreSQL major versions**: New cluster bootstrapped from a logical backup
+(`bootstrap.recovery`), dual-run period, then DNS/service cutover. Declared in git as a
+new Cluster CR — not an in-place upgrade.
+
+**Kubernetes (k3s)**: System Upgrade Controller with a `Plan` CR, draining worker nodes
+one at a time, control-plane last.
 
 ---
 
@@ -83,39 +109,47 @@ For a multi-tenant platform where each customer has different infrastructure:
 ### Repeatable Deployments
 
 The stack is fully declarative:
-- Terraform creates VMs with a fixed image, fixed sizing, reproducible Vagrant box
+- Terraform creates VMs from a fixed image with reproducible sizing
 - Ansible is idempotent — running `bootstrap.yml` twice produces the same state
 - k3s version is pinned (`v1.32.4+k3s1`)
 - All Helm chart versions are pinned
 - Container image tags point to immutable SHAs in production
 
-Tearing down and rebuilding the full stack: `terraform destroy && terraform apply && ansible-playbook bootstrap.yml`. All state lives in PostgreSQL (managed, backed up) and MinIO (backed up). Kubernetes control-plane state (etcd/kine) is transient — it's regenerated from Argo CD syncing git.
+Full rebuild procedure: `terraform destroy && terraform apply && ansible-playbook bootstrap.yml`.
+All persistent state lives in PostgreSQL (managed, backed up) and MinIO (backed up).
+Kubernetes control-plane state is transient — Argo CD regenerates it from git.
 
-### Automated Testing
+### Automated Testing — Priority Order
 
-Current gap: no automated infrastructure tests. What I'd add:
+Testing priority is driven by data reliability first:
 
-| Layer | Tool | What it tests |
+| Priority | Layer | What it tests |
 |---|---|---|
-| Terraform | `terraform validate` + `tflint` in CI | syntax, best practices |
-| Ansible | `ansible-lint` + Molecule | role correctness, idempotency |
-| Kubernetes manifests | `kubeval` / `kubeconform` in CI | manifest schema validity |
-| Integration | `pytest` + `kubectl` port-forward | smoke test: POST /items, GET /items |
-| Chaos | Chaos Mesh / `kubectl delete pod` script | failover, backup restore |
+| 1 | **Database failover** | Insert rows → delete primary pod → wait for failover → verify rows readable from new primary |
+| 2 | **Backup restore** | Scheduled job restores from MinIO to a throwaway namespace → verifies row count. A backup never tested is not a backup. |
+| 3 | **Smoke test** | POST /items → GET /items against dev after every merge to `main` |
+| 4 | Terraform | `terraform validate` + `tflint` in CI |
+| 5 | Ansible | `ansible-lint` |
+| 6 | Kubernetes manifests | `kubeconform` schema validation in CI |
 
-Specifically for the database: an automated test that (a) inserts rows, (b) deletes the primary pod, (c) waits for failover, (d) verifies the rows are still readable from the new primary — this tests the full HA story.
+### Safe Infrastructure Changes — Runbook
 
-### Safe Infrastructure Changes
+Engineers follow runbooks, not checklists. The prod change runbook:
 
-**The change-safely checklist**:
-1. Make the change in git, not directly in the cluster
-2. Apply to `dev` first; validate with metrics + smoke test
-3. Check Argo CD app health before promoting to `prod`
-4. For destructive changes (PVC resize, major upgrades): take a manual backup first, communicate a maintenance window, have a rollback plan
+1. Make the change in git, never directly in the cluster
+2. Apply to `dev`; validate with the smoke test and metric check
+3. Verify Argo CD app health is green before opening the prod PR
+4. For destructive changes (PVC resize, major upgrades): take a manual backup first,
+   communicate a maintenance window, document the rollback procedure in the ticket
 5. Use Argo CD sync waves to sequence dependencies
-6. For database schema migrations: use a job with `argocd.argoproj.io/hook: PreSync` so migrations run before the new app version starts
+6. For database schema migrations: `argocd.argoproj.io/hook: PreSync` job runs migrations
+   before the new application version starts
 
-**Rollback**: Revert the git commit → Argo CD syncs the previous state. For stateful services (PostgreSQL), a rollback of the application version does not roll back data — that requires a restore from backup.
+**Rollback policy**: roll back first, investigate after. Restore service under no pressure,
+then diagnose with a clear head. A git revert → Argo CD sync restores the previous
+application state. For stateful services, application rollback does not roll back data —
+that requires a restore from backup, which is why tested backups are the first reliability
+priority.
 
 ---
 
@@ -124,34 +158,48 @@ Specifically for the database: an automated test that (a) inserts rows, (b) dele
 ### Network
 
 - **Namespaces as security boundaries**: each service tier in its own namespace
-- **NetworkPolicy**: default-deny in every namespace, explicit allow for required paths (demo-app → postgres:5432, prometheus → pod metrics endpoints)
-- **Ingress TLS**: terminate at ingress-nginx with Let's Encrypt; no plaintext traffic from outside the cluster
-- **mTLS**: optional overlay with a service mesh (Linkerd, Cilium) for zero-trust pod-to-pod encryption; not in scope for this assessment but architecturally compatible
+- **NetworkPolicy**: default-deny in every namespace, explicit allow for required paths
+  (demo-app → postgres:5432, Prometheus → pod metrics endpoints)
+- **Ingress TLS**: terminate at ingress-nginx; no plaintext traffic from outside the cluster
+- **mTLS**: service mesh (Linkerd or Cilium) for zero-trust pod-to-pod encryption is the
+  target architecture for production; not in scope for this assessment but structurally
+  compatible
 
 ### Data
 
-- **Encryption at rest**: use LUKS on the VM disk (Vagrant provisioner), or rely on cloud-provider disk encryption in production
-- **Encryption in transit**: PostgreSQL SSL (`sslmode=require`), MinIO with TLS
-- **Backups**: barman archives encrypted at the MinIO layer (server-side encryption); for production, use AWS SSE-S3 or SSE-KMS
-- **Sensitive columns**: application-level encryption for PII fields (not implemented in this demo — would use `pgcrypto` extension or a KMS-backed encryption key)
+- **Encryption at rest**: LUKS on VM disks for local deployments; cloud-provider disk
+  encryption in production
+- **Encryption in transit**: PostgreSQL SSL, MinIO with TLS
+- **Backups**: barman archives to MinIO; production target is AWS SSE-KMS for backup
+  encryption at rest
+- **Sensitive fields**: application-level encryption for PII via `pgcrypto` or a
+  KMS-backed key — not in this demo but the pattern is established
 
 ### Runtime
 
-- All application containers: `runAsNonRoot`, `readOnlyRootFilesystem`, `drop: [ALL]` capabilities, `seccompProfile: RuntimeDefault`
-- CloudNativePG instance pods: operator sets security context automatically per CIS benchmark
+- All application containers: `runAsNonRoot`, `readOnlyRootFilesystem`, `drop: [ALL]`
+  capabilities, `seccompProfile: RuntimeDefault`
+- CloudNativePG sets security context on instance pods per CIS benchmark automatically
 - Pod Security Standards: `enforce: restricted` on `demo-app` and `postgres` namespaces
-- Image scanning (Trivy) in GitHub Actions CI as a non-blocking warning today, blocking gate in production
+- Image scanning (Trivy) in GitHub Actions CI — non-blocking warning in dev, blocking gate
+  in production
 
 ### Secrets and Access
 
-- **Vault** as the secrets backend; External Secrets Operator syncs to Kubernetes Secrets
-- **No static kubeconfig files** shared between engineers; individual OIDC-based identities with time-limited tokens
-- **Principle of least privilege**: applications get a ServiceAccount with only the permissions they need; no applications use `default` SA
-- **Audit trail**: Kubernetes audit log + Argo CD audit log → centralized SIEM (Loki/Elasticsearch); every `kubectl exec`, every sync, every manual override is traceable
+- **Vault** as the secrets backend (production experience); External Secrets Operator syncs
+  to Kubernetes Secrets
+- **OIDC-based cluster access** is the target state — individual identities with time-limited
+  tokens, no shared kubeconfig files. Implementation details need reviewing against current
+  best practices before applying to a new environment.
+- **Principle of least privilege**: applications use dedicated ServiceAccounts with minimal
+  permissions; no application uses the `default` SA
+- **Audit trail**: Kubernetes audit log + Argo CD audit log → centralized logging (Loki);
+  every sync, exec, and manual override is traceable
 
 ### Supply Chain
 
-- Signed container images (Sigstore Cosign) verified by Argo CD admission policy
-- Go dependencies pinned in `go.sum` and scanned with `govulncheck` in CI
-- Helm chart versions pinned; chart sources verified against OCI digest
-- GitHub Actions pinned to full commit SHAs, not mutable tags
+- **Image signing**: Cosign signatures verified by admission policy (production experience)
+- **GitHub Actions**: all third-party actions pinned to full commit SHAs, not mutable tags
+  (production experience)
+- **Go dependencies**: pinned in `go.sum`; `govulncheck` is the target addition to CI
+- **Helm chart versions**: pinned; chart sources verified against OCI digest
