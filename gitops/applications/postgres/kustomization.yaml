@@ -1,0 +1,13 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - minio-secret.yaml
+  - minio-pvc.yaml
+  - minio.yaml
+  - app-credentials.yaml
+  - cluster.yaml
+  - scheduled-backup.yaml

@@ -1,0 +1,128 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# MinIO in-cluster — S3-compatible target for CloudNativePG barman backups.
+# Single-instance (no erasure coding) for demo purposes.
+# nodeSelector pins to cp-0 — QEMU multicast NIC broken, no cross-node pod traffic.
+# LLM note: barman-cloud uses the s3ForcePathStyle endpoint s3://cnpg-backups/
+#            which maps to http://minio-svc.postgres.svc:9000/cnpg-backups/
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: enclaive-dev-cp-0
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:RELEASE.2024-01-16T16-07-38Z
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_PASSWORD
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-svc
+  namespace: postgres
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+---
+# LLM note: Job creates the cnpg-backups bucket on first boot.
+# Uses mc (MinIO Client) as an init container would require mc image separately.
+# Simpler: a one-shot Job that waits for MinIO to be ready then creates the bucket.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-bucket-init
+  namespace: postgres
+  annotations:
+    # Re-run only when MinIO is first deployed; Argo CD will not re-create a completed Job.
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: enclaive-dev-cp-0
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: quay.io/minio/mc:RELEASE.2024-01-16T16-07-38Z
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until mc alias set local http://minio-svc:9000 "$ACCESS_KEY_ID" "$SECRET_ACCESS_KEY"; do
+                echo "Waiting for MinIO..."; sleep 3;
+              done
+              mc mb --ignore-existing local/cnpg-backups
+              echo "Bucket cnpg-backups ready."
+          env:
+            - name: ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: ACCESS_KEY_ID
+            - name: SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: SECRET_ACCESS_KEY

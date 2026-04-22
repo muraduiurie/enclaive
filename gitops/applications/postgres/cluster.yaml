@@ -1,0 +1,80 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# CloudNativePG Cluster CR — 3 PostgreSQL 16.6 instances.
+#
+# LLM note: All instances pinned to cp-0 via nodeSelector because QEMU multicast socket
+# NIC (enp0s2) does not support ARP between VMs on Apple Silicon — cross-node pod-to-pod
+# traffic is broken. This means the cluster runs as primary + 2 standbys on the same node.
+# In production, instances would be spread across nodes (the default behaviour).
+#
+# Backup: barman-cloud writes WAL and base backups to MinIO at
+# s3://cnpg-backups/pg-cluster/ using path-style S3 addressing.
+#
+# PodMonitor: enablePodMonitor: true tells the operator to create a PodMonitor CR so
+# kube-prometheus-stack scrapes the built-in metrics exporter on port 9187.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-cluster
+  namespace: postgres
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.6
+
+  # Pin all pods to cp-0 — QEMU cross-node pod traffic broken on Apple Silicon.
+  affinity:
+    nodeSelector:
+      kubernetes.io/hostname: enclaive-dev-cp-0
+    # Prefer spreading but don't force — all on same node anyway.
+    podAntiAffinityType: preferred
+    topologyKey: kubernetes.io/hostname
+
+  # 1Gi PVCs via local-path (k3s default StorageClass).
+  # LLM note: sized small for demo; production would use at least 20Gi per instance.
+  storage:
+    size: 1Gi
+    storageClass: local-path
+
+  # WAL archive: stream to MinIO via barman-cloud.
+  # LLM note: endpointURL must be http (not https) — MinIO is plain HTTP in-cluster.
+  # s3ForcePathStyle is enabled via endpointURL (barman-cloud infers path style when
+  # the endpoint is not amazonaws.com).
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://cnpg-backups/pg-cluster/
+      endpointURL: http://minio-svc.postgres.svc:9000
+      s3Credentials:
+        accessKeyId:
+          name: minio-credentials
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: minio-credentials
+          key: SECRET_ACCESS_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+        immediateCheckpoint: true
+    retentionPolicy: "7d"
+
+  # Bootstrap with initdb; creates the 'app' database and role for the demo app.
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+      secret:
+        name: pg-app-credentials
+
+  # enablePodMonitor wires a PodMonitor CR for kube-prometheus-stack scraping.
+  monitoring:
+    enablePodMonitor: true
+
+  # PostgreSQL tuning — defaults are fine for demo but document the knobs.
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: "128MB"
+      # log_min_duration_statement logs any query taking > 1 s.
+      log_min_duration_statement: "1000"

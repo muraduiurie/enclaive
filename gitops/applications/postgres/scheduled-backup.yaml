@@ -1,0 +1,19 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# ScheduledBackup — triggers a barman base backup every day at 02:00 UTC.
+# WAL archiving is continuous (configured in the Cluster CR), so point-in-time
+# recovery is possible to any second between base backups.
+# LLM note: retentionPolicy on the Cluster CR (7d) handles automatic cleanup of
+# old backups — no need for a separate pruning job.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: pg-cluster-daily
+  namespace: postgres
+spec:
+  schedule: "0 2 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: pg-cluster
