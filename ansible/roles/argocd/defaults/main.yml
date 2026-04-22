@@ -11,7 +11,7 @@ argocd_server_nodeport_http: 30080
 argocd_server_nodeport_https: 30443
 
 # GitOps repo — update to the real GitHub URL before pushing
-argocd_repo_url: "https://github.com/imuradu/enclaive-platform-challenge.git"
+argocd_repo_url: "https://github.com/muraduiurie/enclaive.git"
 argocd_repo_revision: "main"
 argocd_root_app_path: "gitops/clusters/dev"
 

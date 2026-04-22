@@ -15,7 +15,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/imuradu/enclaive-platform-challenge.git
+    repoURL: https://github.com/muraduiurie/enclaive.git
     targetRevision: main
     path: gitops/infrastructure/argocd
     helm:
