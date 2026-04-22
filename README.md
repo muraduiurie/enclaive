@@ -47,7 +47,9 @@ A GitOps-based infrastructure platform that provisions a Kubernetes cluster and 
 │   └── playbooks/
 │       └── bootstrap.yml        # 6 plays: base → security → k3s → Argo CD
 ├── gitops/
-│   ├── clusters/dev/            # Argo CD App-of-Apps (one file per child app)
+│   ├── clusters/
+│   │   ├── dev/             # Argo CD App-of-Apps (one file per child app)
+│   │   └── prod/            # Prod App-of-Apps skeleton (targetRevision: prod, manual sync)
 │   ├── infrastructure/
 │   │   ├── argocd/              # Argo CD self-managed chart
 │   │   ├── ingress-nginx/       # Ingress controller
@@ -165,17 +167,17 @@ Then the Argo CD `demo-app` Application will sync and the pod will start.
 Test:
 ```bash
 # Health check
-curl http://127.0.0.1:30080/healthz
+curl http://127.0.0.1:30090/healthz
 # {"status":"ok"}
 
 # Create an item
-curl -X POST http://127.0.0.1:30080/items \
+curl -X POST http://127.0.0.1:30090/items \
   -H 'Content-Type: application/json' \
   -d '{"name":"hello enclaive"}'
 # {"id":1,"name":"hello enclaive","created_at":"..."}
 
 # List items
-curl http://127.0.0.1:30080/items
+curl http://127.0.0.1:30090/items
 ```
 
 ---
