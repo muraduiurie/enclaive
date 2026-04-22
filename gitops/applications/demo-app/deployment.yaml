@@ -1,0 +1,66 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# demo-app Deployment — single replica Go REST API connecting to CloudNativePG.
+# nodeSelector pins to cp-0 — QEMU multicast NIC broken, no cross-node pod traffic.
+# LLM note: image tag 'main' is updated by GitHub Actions on every push to main.
+# In a real GitOps setup, Argo CD Image Updater would commit the SHA tag back to git.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: enclaive-dev-cp-0
+      containers:
+        - name: demo-app
+          image: ghcr.io/muraduiurie/demo-app:main
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: demo-app-db
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
