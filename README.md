@@ -188,18 +188,18 @@ Approximate time spent per area, including debugging QEMU networking issues.
 
 | Task | Time |
 |---|---|
-| Terraform modules (vm-cluster, vagrant-lifecycle) | 1.5 h |
-| Vagrant + QEMU ARM64 debugging (NIC, SSH, networking) | 2.0 h |
-| Ansible roles (base, security, kubernetes) | 1.5 h |
-| QEMU k3s networking fixes (5 distinct problems) | 3.5 h |
-| Ansible Argo CD role + bootstrap | 1.0 h |
-| GitOps repo structure + App-of-Apps manifests | 1.0 h |
-| Argo CD sync debugging (repo URL, nodeSelector, CRD size) | 1.5 h |
-| CloudNativePG manifests (Cluster CR, MinIO, backups) | 1.0 h |
-| CloudNativePG bring-up debugging (CRD, webhook, OOM) | 2.0 h |
-| Demo app (Go REST API + Dockerfile + CI workflow) | 1.0 h |
-| Documentation (architecture, operations, security, leadership) | 1.5 h |
-| **Total** | **~18 h** |
+| Terraform modules (vm-cluster, vagrant-lifecycle) | 0.5 h |
+| Vagrant + QEMU ARM64 debugging (NIC, SSH, networking) | 0.7 h |
+| Ansible roles (base, security, kubernetes) | 0.5 h |
+| QEMU k3s networking fixes (5 distinct problems) | 1.2 h |
+| Ansible Argo CD role + bootstrap | 0.3 h |
+| GitOps repo structure + App-of-Apps manifests | 0.3 h |
+| Argo CD sync debugging (repo URL, nodeSelector, CRD size) | 0.5 h |
+| CloudNativePG manifests (Cluster CR, MinIO, backups) | 0.3 h |
+| CloudNativePG bring-up debugging (CRD, webhook, OOM) | 0.7 h |
+| Demo app (Go REST API + Dockerfile + CI workflow) | 0.3 h |
+| Documentation (architecture, operations, security, leadership) | 0.5 h |
+| **Total** | **~6 h** |
 
 The majority of unplanned time was spent on QEMU Apple Silicon networking constraints — multicast ARP broken between VMs, asymmetric routing on the k8sfwd NIC, flannel VXLAN VTEP collision — none of which appear in standard k3s documentation. These are documented in detail in `CLAUDE.md` and `docs/architecture.md`.
 

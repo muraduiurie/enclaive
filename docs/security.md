@@ -76,36 +76,39 @@ Production hardening:
 
 ### Network Policies
 
-No NetworkPolicies are currently deployed (assessment scope). In production:
+NetworkPolicies are deployed in the `postgres` and `demo-app` namespaces via
+`gitops/applications/postgres/network-policy.yaml` and
+`gitops/applications/demo-app/network-policy.yaml`.
 
-```yaml
-# Allow demo-app → pg-cluster-rw only (deny all other ingress to postgres namespace)
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-demo-app
-  namespace: postgres
-spec:
-  podSelector:
-    matchLabels:
-      cnpg.io/cluster: pg-cluster
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: demo-app
-          podSelector:
-            matchLabels:
-              app: demo-app
-      ports:
-        - port: 5432
-```
+Both namespaces follow a **default-deny-all** baseline with additive allow rules.
 
-Additional policies to add:
-- Default deny-all in each namespace
-- Allow Prometheus scraping from `monitoring` namespace
-- Allow Argo CD repo-server → GitHub (egress)
+#### postgres namespace
+
+| Policy | Direction | Selector | Port |
+|---|---|---|---|
+| `default-deny-all` | Ingress + Egress | all pods | — |
+| `allow-demo-app-ingress` | Ingress | `cnpg.io/cluster: pg-cluster` ← `demo-app/app: demo-app` | 5432 |
+| `allow-prometheus-scrape` | Ingress | `cnpg.io/cluster: pg-cluster` ← `monitoring` namespace | 9187 |
+| `allow-postgres-replication` | Ingress + Egress | pg-cluster pods ↔ pg-cluster pods | 5432 |
+| `allow-barman-to-minio` | Egress | `cnpg.io/cluster: pg-cluster` → `app: minio` | 9000 |
+| `allow-dns-egress` | Egress | all pods → kube-system | 53/UDP+TCP |
+
+#### demo-app namespace
+
+| Policy | Direction | Selector | Port |
+|---|---|---|---|
+| `default-deny-all` | Ingress + Egress | all pods | — |
+| `allow-http-ingress` | Ingress | `app: demo-app` ← any | 8080 |
+| `allow-postgres-egress` | Egress | `app: demo-app` → postgres namespace | 5432 |
+| `allow-dns-egress` | Egress | all pods → kube-system | 53/UDP+TCP |
+
+#### What is not yet restricted
+
+- Argo CD, ingress-nginx, and monitoring namespaces do not have NetworkPolicies — they are
+  infrastructure components with broader connectivity requirements (GitHub, node metrics,
+  cross-namespace service discovery). In production, add deny-all + allow rules per component.
+- Egress to the Kubernetes API server (port 6443) is not explicitly allowed in the app
+  namespaces — pods that do not need API access inherit the default-deny, which is correct.
 
 ### Cluster Access
 

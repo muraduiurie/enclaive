@@ -1,0 +1,158 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# NetworkPolicies for the postgres namespace.
+#
+# Design: default-deny-all, then additive allow rules.
+# This ensures only explicitly permitted traffic reaches the database pods and MinIO.
+#
+# Traffic matrix:
+#   demo-app pods          → pg-cluster pods  :5432  (application connections)
+#   monitoring/prometheus  → pg-cluster pods  :9187  (Prometheus PodMonitor scrape)
+#   pg-cluster pods        ↔ pg-cluster pods  :5432  (streaming replication)
+#   pg-cluster pods        → minio pods       :9000  (barman WAL/base backup egress)
+#   all postgres pods      → kube-system DNS  :53    (service discovery)
+
+---
+# Deny all ingress and egress by default.
+# Subsequent policies are additive — only traffic matching a rule is permitted.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: postgres
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Allow demo-app pods to connect to the PostgreSQL primary/replica on port 5432.
+# namespaceSelector + podSelector are AND-ed: traffic must come from a pod labelled
+# app=demo-app inside the demo-app namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-demo-app-ingress
+  namespace: postgres
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: pg-cluster
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: demo-app
+          podSelector:
+            matchLabels:
+              app: demo-app
+      ports:
+        - port: 5432
+          protocol: TCP
+
+---
+# Allow Prometheus (kube-prometheus-stack) to scrape the CNPG metrics exporter.
+# The exporter runs on port 9187 of each pg-cluster pod; Prometheus is in the
+# monitoring namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: postgres
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: pg-cluster
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9187
+          protocol: TCP
+
+---
+# Allow streaming replication between pg-cluster instances.
+# CNPG standbys connect to the primary on port 5432 within the same namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-replication
+  namespace: postgres
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: pg-cluster
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: pg-cluster
+      ports:
+        - port: 5432
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: pg-cluster
+      ports:
+        - port: 5432
+          protocol: TCP
+
+---
+# Allow pg-cluster pods to push WAL segments and base backups to MinIO (barman-cloud).
+# MinIO listens on port 9000 inside the postgres namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-barman-to-minio
+  namespace: postgres
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: pg-cluster
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: minio
+      ports:
+        - port: 9000
+          protocol: TCP
+
+---
+# Allow all pods in the postgres namespace to resolve DNS via kube-dns (kube-system).
+# Required for service name resolution (minio-svc, pg-cluster-rw, etc.).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: postgres
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

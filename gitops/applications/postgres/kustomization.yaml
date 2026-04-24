@@ -11,3 +11,4 @@ resources:
   - app-credentials.yaml
   - cluster.yaml
   - scheduled-backup.yaml
+  - network-policy.yaml

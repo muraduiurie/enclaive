@@ -8,3 +8,4 @@ resources:
   - db-secret.yaml
   - deployment.yaml
   - service.yaml
+  - network-policy.yaml

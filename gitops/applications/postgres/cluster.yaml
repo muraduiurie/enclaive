@@ -68,6 +68,12 @@ spec:
         name: pg-app-credentials
 
   # enablePodMonitor wires a PodMonitor CR for kube-prometheus-stack scraping.
+  # CloudNativePG uses PodMonitor (not ServiceMonitor) because the built-in metrics
+  # exporter runs on each instance pod individually (port 9187). There is no dedicated
+  # metrics Service to scrape — the operator injects the exporter as a sidecar and
+  # exposes it directly on the pod IP. PodMonitor is the correct Prometheus CR for
+  # this pattern; ServiceMonitor would require a headless Service selector which CNPG
+  # does not provide for the metrics port.
   monitoring:
     enablePodMonitor: true
 

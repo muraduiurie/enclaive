@@ -1,0 +1,91 @@
+# NOTICE: This code is provided solely for the purpose of completing a hiring assessment.
+# Any reuse, distribution, or incorporation into other projects (commercial or non-commercial)
+# is strictly prohibited and gives legal ground if abused.
+#
+# NetworkPolicies for the demo-app namespace.
+#
+# Design: default-deny-all, then additive allow rules.
+#
+# Traffic matrix:
+#   anywhere (NodePort)    → demo-app pods :8080  (HTTP API — exposed via NodePort 30090)
+#   demo-app pods          → postgres ns   :5432  (database writes/reads)
+#   demo-app pods          → kube-system   :53    (DNS resolution)
+
+---
+# Deny all ingress and egress by default.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Allow HTTP traffic into the demo-app on port 8080.
+# NodePort services forward from the host into the pod — the source appears as a
+# node-local IP, so we allow from any source (ipBlock: 0.0.0.0/0 would also work,
+# but an empty from list is equivalent and simpler with flannel SNAT).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-http-ingress
+  namespace: demo-app
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-app
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+
+---
+# Allow demo-app to open connections to the PostgreSQL cluster (port 5432).
+# pg-cluster-rw and pg-cluster-r services are in the postgres namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-egress
+  namespace: demo-app
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-app
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: postgres
+      ports:
+        - port: 5432
+          protocol: TCP
+
+---
+# Allow DNS egress so demo-app can resolve pg-cluster-rw.postgres.svc.cluster.local.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
